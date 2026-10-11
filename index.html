@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Buscaminas 15x12</title>
+
+https://cdn.tailwindcss.comscript>
+
+<style>
+.cell{
+    width:38px;
+    height:38px;
+    user-select:none;
+}
+
+.board{
+    display:grid;
+    grid-template-columns:repeat(15,38px);
+    gap:2px;
+}
+</style>
+</head>
+
+<body class="bg-slate-950 text-white min-h-screen">
+
+<div class="container mx-auto px-4 py-6">
+
+    <h1 class="text-5xl text-center font-bold mb-6">
+        💣 Buscaminas
+    </h1>
+
+    <div class="flex flex-wrap justify-center gap-4 mb-6">
+
+        <div class="bg-slate-800 px-5 py-3 rounded-xl shadow-lg">
+            🚩 Minas restantes:
+            <span id="mineCounter">40</span>
+        </div>
+
+        <button
+            onclick="startGame()"
+            class="bg-blue-600 hover:bg-blue-700 px-5 py-3 rounded-xl font-bold">
+            🔄 Nueva partida
+        </button>
+
+    </div>
+
+    <div
+        id="status"
+        class="text-center font-bold text-2xl h-10 mb-4">
+    </div>
+
+    <div class="flex justify-center overflow-auto">
+        <div
+            id="board"
+            class="board bg-slate-800 p-3 rounded-2xl shadow-2xl">
+        </div>
+    </div>
+
+</div>
+
+<script>
+
+// CONFIGURACIÓN
+const COLS = 15;
+const ROWS = 12;
+const MINES = 40;
+
+let board = [];
+let flags = 0;
+let gameOver = false;
+
+const boardElement = document.getElementById("board");
+
+// SONIDO DERROTA
+function playExplosion(){
+
+    const ctx = new AudioContext();
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(250, ctx.currentTime);
+
+    osc.frequency.exponentialRampToValueAtTime(
+        40,
+        ctx.currentTime + 0.6
+    );
+
+    gain.gain.setValueAtTime(
+        0.4,
+        ctx.currentTime
+    );
+
+    gain.gain.exponentialRampToValueAtTime(
+        0.001,
+        ctx.currentTime + 0.6
+    );
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    osc.stop(ctx.currentTime + 0.6);
+}
+
+// SONIDO VICTORIA
+function playVictory(){
+
+    const ctx = new AudioContext();
+
+    const notes = [523,659,784,1046];
+
+    notes.forEach((note,index)=>{
+
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc.type = "triangle";
+        osc.frequency.value = note;
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        gain.gain.setValueAtTime(
+            0.15,
+            ctx.currentTime + index*0.15
+        );
+
+        osc.start(ctx.currentTime + index*0.15);
+        osc.stop(ctx.currentTime + index*0.15 + 0.25);
+    });
+}
+
+// NUEVA PARTIDA
+function startGame(){
+
+    gameOver = false;
+    flags = 0;
+
+    document.getElementById("status").innerHTML = "";
+    updateMineCounter();
+
+    board = [];
+
+    for(let r=0;r<ROWS;r++){
+
+        board[r] = [];
+
+        for(let c=0;c<COLS;c++){
+
+            board[r][c] = {
+                mine:false,
+                revealed:false,
+                flagged:false,
+                count:0
+            };
+        }
+    }
+
+    let minesPlaced = 0;
+
+    while(minesPlaced < MINES){
+
+        const r = Math.floor(Math.random()*ROWS);
+        const c = Math.floor(Math.random()*COLS);
+
+        if(!board[r][c].mine){
+
+            board[r][c].mine = true;
+            minesPlaced++;
+        }
+    }
+
+    calculateNumbers();
+    renderBoard();
+}
+
+function calculateNumbers(){
+
+    for(let r=0;r<ROWS;r++){
+
+        for(let c=0;c<COLS;c++){
+
+            if(board[r][c].mine) continue;
+
+            let total = 0;
+
+            for(let dr=-1;dr<=1;dr++){
+
+                for(let dc=-1;dc<=1;dc++){
+
+                    const nr = r + dr;
+                    const nc = c + dc;
+
+                    if(
+                        nr>=0 &&
+                        nr<ROWS &&
+                        nc>=0 &&
+                        nc<COLS &&
+                        board[nr][nc].mine
+                    ){
+                        total++;
+                    }
+                }
+            }
+
+            board[r][c].count = total;
+        }
+    }
+}
+
+function renderBoard(){
+
+    boardElement.innerHTML = "";
+
+    for(let r=0;r<ROWS;r++){
+
+        for(let c=0;c<COLS;c++){
+
+            const cell = board[r][c];
+            const btn = document.createElement("button");
+
+            btn.className =
+            "cell flex items-center justify-center rounded font-bold text-lg transition";
+
+            if(cell.revealed){
+
+                if(cell.mine){
+
+                    btn.classList.add("bg-red-600");
+                    btn.innerHTML = "💣";
+
+                }else{
+
+                    btn.classList.add(
+                        "bg-slate-200",
+                        "text-black"
+                    );
+
+                    if(cell.count > 0){
+
+                        btn.textContent = cell.count;
+
+                        const colors = {
+                            1:"#2563eb",
+                            2:"#16a34a",
+                            3:"#dc2626",
+                            4:"#9333ea",
+                            5:"#ea580c",
+                            6:"#0891b2",
+                            7:"#111827",
+                            8:"#6b7280"
+                        };
+
+                        btn.style.color = colors[cell.count];
+
+                    } else {
+
+                        btn.textContent = "0";
+                        btn.style.color = "#94a3b8";
+                    }
+
+                }
+
+            }else{
+
+                btn.classList.add(
+                    "bg-slate-600",
+                    "hover:bg-slate-500"
+                );
+
+                if(cell.flagged){
+                    btn.innerHTML = "🚩";
+                }
+            }
+
+            btn.addEventListener("click",()=>{
+
+                reveal(r,c);
+
+            });
+
+            btn.addEventListener("contextmenu",(e)=>{
+
+                e.preventDefault();
+                toggleFlag(r,c);
+
+            });
+
+            boardElement.appendChild(btn);
+        }
+    }
+}
+
+function toggleFlag(r,c){
+
+    if(gameOver) return;
+
+    let cell = board[r][c];
+
+    if(cell.revealed) return;
+
+    cell.flagged = !cell.flagged;
+
+    flags += cell.flagged ? 1 : -1;
+
+    updateMineCounter();
+    renderBoard();
+}
+
+function updateMineCounter(){
+
+    document.getElementById("mineCounter").textContent =
+        MINES - flags;
+}
+
+function reveal(r,c){
+
+    if(gameOver) return;
+
+    let cell = board[r][c];
+
+    if(cell.revealed || cell.flagged) return;
+
+    cell.revealed = true;
+
+    if(cell.mine){
+
+        playExplosion();
+
+        revealAll();
+
+        gameOver = true;
+
+        document.getElementById("status").innerHTML =
+        "💥 ¡Has perdido!";
+
+        document.getElementById("status")
+            .className =
+        "text-center text-red-500 font-bold text-3xl mb-4";
+
+        renderBoard();
+
+        return;
+    }
+
+    if(cell.count === 0){
+
+        for(let dr=-1;dr<=1;dr++){
+
+            for(let dc=-1;dc<=1;dc++){
+
+                let nr = r + dr;
+                let nc = c + dc;
+
+                if(
+                    nr>=0 &&
+                    nr<ROWS &&
+                    nc>=0 &&
+                    nc<COLS
+                ){
+
+                    if(!board[nr][nc].revealed){
+
+                        reveal(nr,nc);
+                    }
+                }
+            }
+        }
+    }
+
+    renderBoard();
+    checkWin();
+}
+
+function revealAll(){
+
+    for(let r=0;r<ROWS;r++){
+
+        for(let c=0;c<COLS;c++){
+
+            board[r][c].revealed = true;
+        }
+    }
+}
+
+function checkWin(){
+
+    let hidden = 0;
+
+    for(let r=0;r<ROWS;r++){
+
+        for(let c=0;c<COLS;c++){
+
+            if(!board[r][c].revealed){
+
+                hidden++;
+            }
+        }
+    }
+
+    if(hidden === MINES){
+
+        playVictory();
+
+        gameOver = true;
+
+        document.getElementById("status").innerHTML =
+        "🏆 ¡Victoria!";
+
+        document.getElementById("status")
+            .className =
+        "text-center text-green-500 font-bold text-3xl mb-4";
+    }
+}
+
+startGame();
+
+</script>
+
+</body>
+</html>
